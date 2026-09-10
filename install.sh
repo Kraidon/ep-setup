@@ -4,20 +4,15 @@ set -e
 
 SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
 CONFIG_FILE="$SCRIPT_PATH/config.env"
+SCRIPT_ver="v0.0.3"
+
 RESOURCE="$SCRIPT_PATH/.resource"
 RES_archs="$RESOURCE/archives"
 RES_bins="$RESOURCE/bin"
 RES_dirs="$RESOURCE/dirs"
 RES_logs="$RESOURCE/logs"
 
-LOG_FILE="$SCRIPT_PATH/log.txt"
-
-if [ -f $LOG_FILE ]; then 
-	rm $LOG_FILE
-fi
-
-touch $LOG_FILE
-
+# Source from config.env and system-data
 source /etc/os-release
 source "$CONFIG_FILE"
 
@@ -42,7 +37,7 @@ Cres="\e[0m"
 
 # Log functions
 LOG-comp() {
-	TIME="$(date '+%H:%M:%S %D')"
+	local TIME="$(date '+%H:%M:%S %D')"
 	
 	echo -e "${Cg_D}[${Cg_B}COMPLETE${Cg_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
 }
@@ -53,28 +48,28 @@ LOG-cmd() {
 }
 
 LOG-info() {
-	TIME="$(date '+%H:%M:%S %D')"
+	local TIME="$(date '+%H:%M:%S %D')"
 	
 	echo -e "${Cw_D}[${Cw_B}INFO${Cw_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
 }
 
 LOG-warn() {
-	TIME="$(date '+%H:%M:%S %D')"
+	local TIME="$(date '+%H:%M:%S %D')"
 	
 	echo -e "${Cy_D}[${Cy_B}WARNING${Cy_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
 }
 
 LOG-err() {
-	TIME="$(date '+%H:%M:%S %D')"
+	local TIME="$(date '+%H:%M:%S %D')"
 	
 	echo -e "${Cr_D}[${Cr_B}ERROR${Cr_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
 	exit 1
 }
 
+# Check config-file and connection to link-addresses
 pre-install() {	
 	LOG-info "Pre-install"
 	
-	LOG-info "Check config-file..."
 	if [ -f "$CONFIG_FILE" ]; then
 		LOG-comp "File ${CONFIG_FILE} found..."
 	else
@@ -84,32 +79,18 @@ pre-install() {
 	LOG-info "Please enter password..."
 	sudo -v || LOG-err "Incorrect password!"
 
-	LOG-info "Check link-addresses..."
-#	check-link "$ZJ_URL"
-#	check-link "$FISH_URL"
-#	check-link "$VP_URL"
-#	check-link "$OMF_URL"
-
-	LOG-info "Check directories..."
-	check-dir "$RESOURCE"
-	check-dir "$RES_archs"
-	check-dir "$RES_bins"
-	check-dir "$RES_dirs"
-	check-dir "$RES_logs"
+	LOG-info "Scan link-addresses..."
+	scan-link "$ZJ_url"
+	scan-link "$FISH_url"
+	scan-link "$VP_url"
+	scan-link "$OMF_url"
 }
 
-check-dir() {
-	if [ ! -d $1 ]; then
-		LOG-cmd mkdir $1
-	else
-		LOG-info "Directory $1 already created."
-	fi
-}
-
-check-link() {
+# Scan link-address
+scan-link() {
 	local URL="$1"
 	local CONDITION=$(curl -sLfI --connect-timeout 2 --retry 3 "$URL" > /dev/null)
-
+	
 	if $CONDITION; then
 		LOG-comp "Address $1 worked"
 	else
@@ -117,12 +98,15 @@ check-link() {
 	fi
 }
 
+# Install pkgs (default: fish, zellij, vim, btop, mc)
 install-pkgs() {
 	LOG-info "Installing apps on ${ID}..."
+
+	# Installing vim mc btop
 	case $ID in
 		"arch" )
 			LOG-cmd sudo pacman -Sy > /dev/null
-			LOG-cmd sudo pacman -S "$APPS"
+			LOG-cmd sudo pacman -S "${APPS[@]}"
 			;;
 		"ubuntu" | "debian" )
 			LOG-cmd sudo apt-get update
@@ -134,73 +118,191 @@ install-pkgs() {
 			;;
 	esac
 
-	LOG-info "Installing fish..."
-	local FISH_TAR="${RES_archs}/fish-${FISH_VER}.tar.xz"
-	local FISH_BIN="${RES_bins}/fish"
+	# Installing fish
+	if ! command -v fish &> /dev/null; then
+		LOG-info "Installing fish (${FISH_ver})..."
+		
+		local FISH_tar="${RES_archs}/fish-${FISH_ver}.tar.xz"
+		local FISH_bin="${RES_bins}/fish"
 	
-	if [ ! -f ${FISH_TAR} ]; then
-		LOG-cmd wget "$FISH_URL" -O "$FISH_TAR"
+		if [ ! -f "$FISH_bin" ]; then
+			if [ ! -f ${FISH_tar} ]; then
+				LOG-cmd wget "$FISH_url" -O "$FISH_tar"
+			fi
+			LOG-cmd tar -xvf "$FISH_tar" -C "$RES_bins"
+			LOG-cmd chmod u+x "$FISH_bin"
+		fi
+		sudo mv "$FISH_BIN" /usr/local/dir
 	fi
-	if [ ! -f "$FISH_BIN" ]; then
-		LOG-cmd tar -xvf "$FISH_TAR" -C "$RES_bins"
-	fi
-	LOG-cmd chmod u+x "$FISH_BIN"
-	# sudo mv "$FISH_BIN" /usr/local/dir
 
-	LOG-info "installing zellij..."
-	local ZJ_TAR="${RES_archs}/zellij-${ZJ_VER}.tar.gz"
-	local ZJ_BIN="${RES_bins}/zellij"
-	
-	if [ ! -f ${ZJ_TAR} ]; then
-		LOG-cmd wget "$ZJ_URL" -O "$ZJ_TAR"
+	# Installing zellij
+	if ! command -v zellij &> /dev/null; then	
+		LOG-info "installing zellij (${ZJ_ver})..."
+		
+		local ZJ_tar="${RES_archs}/zellij-${ZJ_ver}.tar.gz"
+		local ZJ_bin="${RES_bins}/zellij"
+
+		if [ ! -f "$ZJ_bin" ]; then
+			if [ ! -f ${ZJ_tar} ]; then
+				LOG-cmd wget "$ZJ_url" -O "$ZJ_tar"
+			fi
+			LOG-cmd tar -xvf "$ZJ_tar" -C "$RES_bins"
+			LOG-cmd chmod u+x "$ZJ_bin"
+		fi
+		sudo mv "$ZJ_BIN" /usr/local/dir
 	fi
-	if [ ! -f "$ZJ_BIN" ]; then
-		LOG-cmd tar -xvf "$ZJ_TAR" -C "$RES_bins"
-	fi
-	LOG-cmd chmod u+x "$ZJ_BIN"
-	# sudo mv "$ZJ_BIN" /usr/local/dir
 }
 
+# install and setup Oh-My-Fish
 install-omf() {
-	LOG-info "Installing Oh-My-Fish."
+	LOG-info "Installing Oh-My-Fish (${OMF_ver})..."
 	
-	local OMF_TAR="${RES_archs}/omf-${OMF_VER}.tar.gz"
-	local OMF_DIR="${RES_dirs}/oh-my-fish-8"
+	local OMF_tar="${RES_archs}/omf-${OMF_ver}.tar.gz"
+	local OMF_dir="${RES_dirs}/oh-my-fish-8"
 
-	if [ ! -f ${OMF_TAR} ]; then
-		LOG-cmd wget "$OMF_URL" -O "$OMF_TAR"
+	if [ ! -d "$OMF_dir" ]; then
+		if [ ! -f ${OMF_tar} ]; then
+			LOG-cmd wget "$OMF_url" -O "$OMF_tar"
+		fi
+		LOG-cmd tar -xvf "$OMF_tar" -C "$RES_dirs"
 	fi
-	if [ ! -d "$OMF_DIR" ]; then
-		LOG-cmd tar -xvf "$OMF_TAR" -C "$RES_dirs"
-	fi
+	
+	# LOG-cmd fish "$OMF_dir/bin/install" --offline="$OMF_tar"	
 }
 
+# install and setup Vim-Plug
 install-vp() {
-	LOG-info "Installing Vim-Plug."
+	LOG-info "Installing Vim-Plug (${VP_ver})..."
 	
-	local VP_TAR="${RES_archs}/vp-${VP_VER}.tar.gz"
-	local VP_DIR="${RES_dirs}/vim-plug-0.14.0"
+	# download and untar archive
+	local VP_tar="${RES_archs}/vp-${VP_ver}.tar.gz"
+	local VP_dir="${RES_dirs}/vim-plug-0.14.0"
+	
+	if [ ! -d "$VP_dir" ]; then
+		if [ ! -f ${VP_tar} ]; then 
+			LOG-cmd wget "$VP_url" -O "$VP_tar"
+		fi
+		LOG-cmd tar -xvf "$VP_tar" -C "$RES_dirs"
+	fi
+	
+	# add plug.vim
+	local AUTOLOAD_dir="${HOME}/.vim/autoload/"
+	local PLUG_VIM="$VP_dir/plug.vim"
+	local VIMRC="${HOME}/.vimrc"
 
-	if [ ! -f ${VP_TAR} ]; then 
-		LOG-cmd wget "$VP_URL" -O "$VP_TAR"
+	if [ ! -f "$PLUG_VIM" ]; then
+		if [ ! -d "$AUTOLOAD_dir" ]; then
+			LOG-cmd mkdir -p "$AUTOLOAD_dir"
+		fi
+		LOG-cmd cp "$PLUG_VIM" "$AUTOLOAD_dir"
 	fi
-	if [ ! -d "$VP_DIR" ]; then
-		LOG-cmd tar -xvf "$VP_TAR" -C "$RES_dirs"
-	fi
+	
+	# edit .vimrc
+	LOG-info "Edit $VIMRC..."
+	cat <<EOF > $VIMRC
+:set nu
+:set tabstop=4
+:set cursorline
+
+:hi CursorLine cterm = bold
+:hi CursorLineNr cterm = bold
+
+call plug#begin('~/.vim/plugged')
+	Plug 'tpope/vim-fugitive'
+	Plug 'tpope/vim-surround'
+    Plug 'vim-airline/vim-airline'
+    Plug 'vim-airline/vim-airline-themes'
+    Plug 'airblade/vim-gitgutter'
+    Plug 'arcticicestudio/nord-vim'
+call plug#end()
+
+let g:airline_powerline_fonts = 1
+let g:airline_theme = 'nord'
+let g:gitgutter_enabled = 1
+let g:airline#extensions#whitespace#enabled = 0
+
+colorscheme nord
+EOF
 }
 
 post-install() {
 	LOG-info "Post-install"
 	
-	LOG-info "Remove directory $RESOURCES"
-	if [ -d "$RESOURCES" ]; then
-		rm -rf "$RESOURCES"
-	else
-		LOG-info "Directory $RESOURCES no found!"
+	# Clean .resources/bins
+	if [ -d "$RES_bins" ]; then
+		LOG-cmd rm -rf "$RES_bins/*"
+	fi
+	# Clean .resources/dirs
+	if [ -d "$RES_dirs" ]; then
+		LOG-cmd rm -rf "$RES_dirs/*"
 	fi
 }
 
-pre-install
-install-pkgs
-install-omf
-install-vp
+create-dir() {
+	if [ ! -d "$1" ]; then
+		mkdir "$1"
+	fi
+}
+
+parse-args() {
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			"-h" | "--help" )
+				echo -e "EP-SETUP ($SCRIPT_ver)"
+				echo -e "-f | --force   - Ignore unworking link-addresses."
+				echo -e "-a | --add-app - Add application to install (...include in apt / pacman)."
+				echo -e ""
+				
+				exit 0
+				;;
+			"-a" | "--add-app" )
+				echo -e "ADD: add application $2..."
+				APPS+=("$2")
+				
+				shift 2
+				;;
+			"-f" | "--force" )
+				echo -e "ADD: ignore unworking link-addresses..."
+				
+				shift 1
+				;;
+			"-v" | "--version" )
+				echo -e "$SCRIPT_ver"
+				exit 0
+				;;
+			* )
+				echo -e "ERR: Unknown parameter: $1"
+				exit 1
+				;;
+		esac
+	done
+}
+
+parse-args "${@}"
+
+main() {
+	# Create directories (this operations not write to log-file)
+	create-dir "$RESOURCE"
+	create-dir "$RES_archs"
+	create-dir "$RES_bins"
+	create-dir "$RES_dirs"
+	create-dir "$RES_logs"
+
+	# Initializate log-file
+	LOG_FILE="$RES_logs/log_$(date '+%y%m%d-%H%M%S').txt"
+	
+	if [ -f $LOG_FILE ]; then 
+		rm $LOG_FILE
+	fi
+	
+	touch $LOG_FILE
+	
+	# Installation
+	# pre-install
+
+	# install-pkgs
+	# install-omf
+	install-vp
+}
+
+main

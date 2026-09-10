@@ -1,7 +1,9 @@
 ## Description
-Script for install packages and plugins on Linux.
+**ep-setup** (where 'ep' is 'Epwell') is used for quick installation and customization of necessary software on SBC's, VPS, and any other Linux-machines.
 
 ## Platforms
+This script works on the following platforms:
+
 | Architecture | ArchLinux | Ubuntu | Debian | Manjaro |
 | :----------- | :-------: | :----: | :----: | :-----: |
 | x86_64       | +         | +      | ?      | ?       |
@@ -24,7 +26,20 @@ Script for install packages and plugins on Linux.
     - [vim-airline-themes](https://github.com/vim-airline/vim-airline-themes)
     - [vim-gitgutter](https://github.com/airblade/vim-gitgutter)
 
+## Structure
+(this schema created by 'tree')
+```bash
+.
+├── config.env
+├── install.sh
+└── .resource
+    ├── archives    # Contains all downloaded archives
+    ├── bin         # Contains all extracted binaries
+    ├── dirs        # Contains all extracted directories
+    └── logs        # Contains all log-files
+```
+
 ## Installation
-```sh
+```bash
 ./install.sh
 ```
