@@ -18,7 +18,6 @@ This script works on the following platforms:
     - [zellij](https://zellij.dev) (v0.45.1) - window manager.
 - Plug-managers:
     - [vim-plug](https://github.com/junegunn/vim-plug) (0.14.0) - plugin manager for vim.
-    - [oh-my-fish](https://github.com/oh-my-fish/oh-my-fish) (v8) - plugin manager for fish.
 - Vim-plugins:
     - [vim-fugitive](https://github.com/tpope/vim-fugitive)
     - [vim-surround](https://github.com/tpope/vim-surround)
@@ -30,13 +29,17 @@ This script works on the following platforms:
 (this schema created by 'tree')
 ```bash
 .
-├── config.env
+├── configs
+│   ├── apps.env
+│   ├── links.env
+│   ├── patterns
+│   └── themes
 ├── install.sh
-└── .resource
-    ├── archives    # Contains all downloaded archives
-    ├── bin         # Contains all extracted binaries
-    ├── dirs        # Contains all extracted directories
-    └── logs        # Contains all log-files
+└── resources
+    ├── archives
+    ├── bin
+    ├── dirs
+    └── logs
 ```
 
 ## Installation
