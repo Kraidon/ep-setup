@@ -5,7 +5,7 @@ set -e
 SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
 CONFIG_PATH="$SCRIPT_PATH/configs"
 PATTERN_PATH="$CONFIG_PATH/patterns"
-SCRIPT_ver="v0.0.4"
+SCRIPT_ver="v0.0.5"
 
 CONFIG_LINKS="$CONFIG_PATH/links.env"
 APPS_LIST="$CONFIG_PATH/apps.txt"
@@ -189,7 +189,7 @@ install-fish() {
 		LOG-cmd touch "$PROMPT_conf"
 	fi
 
-	EDIT-fish_frozen_theme "${THEME_conf}"
+	# EDIT-fish_frozen_theme "${THEME_conf}"
 	EDIT-fish_prompt "${PROMPT_conf}"
 }
 

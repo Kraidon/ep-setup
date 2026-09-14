@@ -1,0 +1,22 @@
+:set nu
+:set tabstop=4
+:set cursorline
+
+:hi CursorLine cterm = bold
+:hi CursorLineNr cterm = bold
+
+call plug#begin('~/.vim/plugged')
+	Plug 'tpope/vim-fugitive'
+	Plug 'tpope/vim-surround'
+    Plug 'vim-airline/vim-airline'
+    Plug 'vim-airline/vim-airline-themes'
+    Plug 'airblade/vim-gitgutter'
+    Plug 'arcticicestudio/nord-vim'
+call plug#end()
+
+let g:airline_powerline_fonts = 1
+let g:airline_theme = 'nord'
+let g:gitgutter_enabled = 1
+let g:airline#extensions#whitespace#enabled = 0
+
+colorscheme nord
