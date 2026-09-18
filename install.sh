@@ -5,7 +5,7 @@ set -e
 SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
 CONFIG_PATH="$SCRIPT_PATH/configs"
 PATTERN_PATH="$CONFIG_PATH/patterns"
-SCRIPT_ver="v0.0.5"
+SCRIPT_ver="v0.0.6"
 
 CONFIG_LINKS="$CONFIG_PATH/links.env"
 APPS_LIST="$CONFIG_PATH/apps.txt"
@@ -15,18 +15,17 @@ CONFIG_ZJ="$PATTERN_PATH/zellij/zellij.env"
 
 RESOURCE="$SCRIPT_PATH/resources"
 RES_archs="$RESOURCE/archives"
-RES_bins="$RESOURCE/bin"
+RES_bins="$RESOURCE/bins"
 RES_dirs="$RESOURCE/dirs"
 RES_logs="$RESOURCE/logs"
 
 APPS=""
 
+ADD_dev="no"
+
 # Source from configs and system-data
 source /etc/os-release
-source "$CONFIG_VIM"
 source "$CONFIG_LINKS"
-source "$CONFIG_FISH"
-source "$CONFIG_ZJ"
 
 # Color variables
 Cr_D="\e[0;31m"
@@ -78,6 +77,12 @@ LOG-cmd() {
 	"$@" || LOG-err "Command failed: $*"
 }
 
+CREATE-dir() {
+	if [ ! -d "$1" ]; then
+		mkdir -p "$1"
+	fi
+}
+
 # Scan path's
 SCAN-config() {
 	local FILE="$1"
@@ -101,8 +106,46 @@ SCAN-link() {
 	fi
 }
 
+# App installation
+#
+# 1 args: Name of cli
+# 2 args: Version app
+# 3 args: Link-address
+# 4 args: Name for bin-file after extracted
+# 5 args: Name for arcive-file
+#
+# Example:
+# APP-install-bin 'yourapp' 'v1' 'https://any-site.com/yourapp-v1.tar.gz' 'yourapp-v1' 'yourapp-v1.tar.gz'
+#
+APP-install-bin() {
+	local BIN_cli="$1"
+	local BIN_ver="$2"
+	local TAR_url="$3"
+	
+	local BIN_path="${RES_bins}/$4"
+	local TAR_path="${RES_archs}/$5"
+
+	if ! command -v "${BIN_cli}" &> /dev/null; then	
+		LOG-info "installing ${BIN_cli} (${BIN_ver})..."
+		if [ ! -f "$BIN_path" ]; then
+			if [ ! -f ${TAR_path} ]; then
+				# Download archive to /resources/archives
+				LOG-cmd wget "$BIN_url" -O "$TAR_path"
+			fi
+			# Extract from /resources/archives to /resources/bins
+			LOG-cmd tar -xvf "$TAR_path" -C "$RES_bins"
+			LOG-cmd chmod u+x "$BIN_path"
+		fi
+		# Moving from /resources/bins to /usr/local/bin
+		LOG-cmd sudo mv "$BIN_path" "/usr/local/bin/${BIN_cli}"
+		LOG-comp "${BIN_cli} has been successfully installed!"
+	else
+		LOG-info "${BIN_cli} is already installed!"
+	fi
+}
+
 # Check config-file and connection to link-addresses
-pre-install() {
+PRE-install() {
 	LOG-info "Pre-install"
 	
 	SCAN-config "$APPS_LIST"
@@ -118,10 +161,11 @@ pre-install() {
 	SCAN-link "$ZJ_url"
 	SCAN-link "$FISH_url"
 	SCAN-link "$VP_url"
+	SCAN-link "$YQ_url"
 }
 
 # Install pkgs (default: fish, zellij, vim, btop, mc)
-install-pkgs() {
+INSTALL-pkgs() {
 	LOG-info "Installing apps on ${ID}..."
 
 	APPS+=( $(< $APPS_LIST) )
@@ -142,34 +186,31 @@ install-pkgs() {
 			;;
 	esac
 
-	install-fish	
-	install-zellij
+	APP-install-bin "fish" "$FISH_ver" "$FISH_url" \
+		"fish" \
+		"fish-$FISH_ver.tar.xz"
+	
+	APP-install-bin "zellij" "$ZJ_ver" "$ZJ_url" \
+		"zellij" \
+		"zellij-$ZJ_ver.tar.gz"
 }
 
-install-fish() {
-	if ! command -v fish &> /dev/null; then
-		LOG-info "Installing fish (${FISH_ver})..."
-		
-		local FISH_tar="${RES_archs}/fish-${FISH_ver}.tar.xz"
-		local FISH_bin="${RES_bins}/fish"
-	
-		if [ ! -f "$FISH_bin" ]; then
-			if [ ! -f ${FISH_tar} ]; then
-				# Download archive
-				LOG-cmd wget "$FISH_url" -O "$FISH_tar"
-			fi
-			# Extract
-			LOG-cmd tar -xvf "$FISH_tar" -C "$RES_bins"
-			LOG-cmd chmod u+x "$FISH_bin"
-		fi
-		# Moving to /usr/local/bin
-		LOG-cmd sudo mv "$FISH_BIN" "/usr/local/bin"
-		LOG-comp "Fish has been successfully installed!"
-	else
-		LOG-info "Fish is already installed!"
-	fi
+INSTALL-dev() {
+	LOG-info "Installing dev-apps..."
 
+	APP-install-bin "yq" "$YQ_ver" "$YQ_url" \
+		"yq_linux_${SHORT_ARCH}" \
+		"yq-$YQ_ver.tar.gz"
+}
+
+SETUP-fish() {
 	LOG-info "Setup fish..."
+	
+	source "$CONFIG_FISH"
+
+	if [[ ! $SHELL = "/usr/local/bin/fish" ]]; then
+		LOG-cmd sudo chsh -s "/usr/local/bin/fish" "$(id -un)"
+	fi
 	
 	local CONFD_dir="${HOME}/.config/fish/conf.d"
 	local FUNC_dir="${HOME}/.config/fish/functions"
@@ -190,40 +231,24 @@ install-fish() {
 	fi
 
 	# EDIT-fish_frozen_theme "${THEME_conf}"
-	EDIT-fish_prompt "${PROMPT_conf}"
+	# EDIT-fish_prompt "${PROMPT_conf}"
 }
 
-install-zellij() {
-	if ! command -v zellij &> /dev/null; then	
-		LOG-info "installing zellij (${ZJ_ver})..."
-		
-		local ZJ_tar="${RES_archs}/zellij-${ZJ_ver}.tar.gz"
-		local ZJ_bin="${RES_bins}/zellij"
+SETUP-zellij() {
+	LOG-info "Setup zellij..."
 
-		if [ ! -f "$ZJ_bin" ]; then
-			if [ ! -f ${ZJ_tar} ]; then
-				# Download archive
-				LOG-cmd wget "$ZJ_url" -O "$ZJ_tar"
-			fi
-			# Extract
-			LOG-cmd tar -xvf "$ZJ_tar" -C "$RES_bins"
-			LOG-cmd chmod u+x "$ZJ_bin"
-		fi
-		# Moving to /usr/local/bin
-		LOG-cmd sudo mv "$ZJ_BIN" /usr/local/dir
-		LOG-comp "Zellij has been successfully installed!"
-	else
-		LOG-info "Zellij is already installed!"
-	fi
+	source "$CONFIG_ZJ"
 }
 
 # install and setup Vim-Plug
-install-vp() {
+INSTALL-vp() {
 	LOG-info "Installing Vim-Plug (${VP_ver})..."
+	
+	source "$CONFIG_VIM"
 	
 	# download and untar archive
 	local VP_tar="${RES_archs}/vp-${VP_ver}.tar.gz"
-	local VP_dir="${RES_dirs}/vim-plug-0.14.0"
+	local VP_dir="${RES_dirs}/vim-plug-${VP_ver}"
 	
 	if [ ! -d "$VP_dir" ]; then
 		if [ ! -f ${VP_tar} ]; then 
@@ -248,32 +273,27 @@ install-vp() {
 	EDIR-vimrc "${VIMRC}"
 }
 
-post-install() {
+POST-install() {
 	LOG-info "Post-install"
 	
-	# Clean .resources/bins
+	# Clean ./resources/bins
 	if [ -d "$RES_bins" ]; then
 		LOG-cmd rm -rf "$RES_bins/*"
 	fi
-	# Clean .resources/dirs
+	# Clean ./resources/dirs
 	if [ -d "$RES_dirs" ]; then
 		LOG-cmd rm -rf "$RES_dirs/*"
-	fi
-}
-
-create-dir() {
-	if [ ! -d "$1" ]; then
-		mkdir -p "$1"
 	fi
 }
 
 parse-args() {
 	while [[ $# -gt 0 ]]; do
 		case $1 in
-			"-h" | "--help" )
+			"-h" | "--help" | "h" | "help" )
 				echo -e "EP-SETUP ($SCRIPT_ver)"
 				echo -e "-f | --force   - Ignore unworking link-addresses."
 				echo -e "-a | --add-app - Add application to install (...include in apt / pacman)."
+				echo -e "-d | --dev-app - Add any-application to install for development (yq)."
 				echo -e ""
 				
 				exit 0
@@ -283,6 +303,12 @@ parse-args() {
 				APPS+=("$2")
 				
 				shift 2
+				;;
+			"-d" | "--dev-app" )
+				echo -e "ADD: add application yq..."
+				ADD_dev="yes"
+
+				shift 1
 				;;
 			"-f" | "--force" )
 				echo -e "ADD: ignore unworking link-addresses..."
@@ -304,13 +330,13 @@ parse-args() {
 parse-args "${@}"
 
 main() {
-	# Create directories (this operations not write to log-file)
-	create-dir "$RES_archs"
-	create-dir "$RES_bins"
-	create-dir "$RES_dirs"
-	create-dir "$RES_logs"
+	### Create directories (this operations not write to log-file)
+	CREATE-dir "$RES_archs"
+	CREATE-dir "$RES_bins"
+	CREATE-dir "$RES_dirs"
+	CREATE-dir "$RES_logs"
 
-	# Initializate log-file
+	### Initializate log-file
 	LOG_FILE="$RES_logs/log_$(date '+%y%m%d-%H%M%S').txt"
 	
 	if [ -f $LOG_FILE ]; then 
@@ -319,11 +345,17 @@ main() {
 	
 	touch $LOG_FILE
 	
-	# Installation	
-	# pre-install
-	install-pkgs
-	# install-vp
-	# post-install
+	### START INSTALLATION PROCESS
+	
+	PRE-install
+	INSTALL-pkgs
+	if [[ $ADD_dev = "yes" ]]; then
+		INSTALL-dev
+	fi
+	#SETUP-fish
+	#SETUP-zellij
+	#INSTALL-vp
+	#POST-install
 }
 
 main
