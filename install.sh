@@ -2,74 +2,76 @@
 
 set -e
 
-SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
-CONFIG_PATH="$SCRIPT_PATH/configs"
-PATTERN_PATH="$CONFIG_PATH/patterns"
-SCRIPT_ver="v0.0.6"
-
-CONFIG_LINKS="$CONFIG_PATH/links.env"
-APPS_LIST="$CONFIG_PATH/apps.txt"
-CONFIG_VIM="$PATTERN_PATH/vim/vim.env"
-CONFIG_FISH="$PATTERN_PATH/fish/fish.env"
-CONFIG_ZJ="$PATTERN_PATH/zellij/zellij.env"
-
-RESOURCE="$SCRIPT_PATH/resources"
+SCRIPT_path="$(dirname "$(readlink -f "$0")")"
+CONFIG_path="$SCRIPT_path/configs"
+PATTERN_path="$CONFIG_path/patterns"
+RESOURCE="$SCRIPT_path/resources"
 RES_archs="$RESOURCE/archives"
 RES_bins="$RESOURCE/bins"
 RES_dirs="$RESOURCE/dirs"
 RES_logs="$RESOURCE/logs"
+LOG_file="$RES_logs/log_$(date '+%y%m%d-%H%M%S').txt"
+
+SCRIPT_ver="v0.0.7"
+
+CONFIG_links="$CONFIG_path/links.env"
+APPS_list="$CONFIG_path/apps.txt"
+CONFIG_vim="$PATTERN_path/vim/vim.env"
+CONFIG_fish="$PATTERN_path/fish/fish.env"
+CONFIG_zj="$PATTERN_path/zellij/zellij.env"
 
 APPS=""
 
-ADD_dev="no"
+SET_dev="no"
+SET_modules="all"
 
 # Source from configs and system-data
 source /etc/os-release
-source "$CONFIG_LINKS"
+source "$CONFIG_links"
 
-# Color variables
-Cr_D="\e[0;31m"
-Cg_D="\e[0;32m"
-Cb_D="\e[0;34m"
-Cc_D="\e[0;36m"
-Cm_D="\e[0;35m"
-Cy_D="\e[0;33m"
-Cw_D="\e[0;37m"
+### COLOR CODE'S ###
+CL0_reset="\e[0m"
 
-Cr_B="\e[1;31m"
-Cg_B="\e[1;32m"
-Cb_B="\e[1;34m"
-Cc_B="\e[1;36m"
-Cm_B="\e[1;35m"
-Cy_B="\e[1;33m"
-Cw_B="\e[1;37m"
+CL1_red="\e[0;31m" 
+CL1_grn="\e[0;32m"
+CL1_blu="\e[0;34m"
+CL1_cyn="\e[0;36m"
+CL1_mag="\e[0;35m"
+CL1_yel="\e[0;33m"
+CL1_whi="\e[0;37m"
 
-Cres="\e[0m"
+CL2_red="\e[1;31m"
+CL2_grn="\e[1;32m"
+CL2_blu="\e[1;34m"
+CL2_cyn="\e[1;36m"
+CL2_mag="\e[1;35m"
+CL2_yel="\e[1;33m"
+CL2_whi="\e[1;37m"
 
-# Log functions
+### LOG FUNCTIONS ###
 LOG-info() {
 	local TIME="$(date '+%H:%M:%S %D')"
 	
-	echo -e "${Cw_D}[${Cw_B}INFO${Cw_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
+	echo -e "${CL1_whi}[${CL2_whi}INFO${CL1_whi} ${TIME}] ${CL0_reset}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_file})
 }
 
 LOG-err() {
 	local TIME="$(date '+%H:%M:%S %D')"
 	
-	echo -e "${Cr_D}[${Cr_B}ERROR${Cr_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
+	echo -e "${CL1_red}[${CL2_red}ERROR${CL1_red} ${TIME}] ${CL0_reset}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_file})
 	exit 1
 }
 
 LOG-warn() {
 	local TIME="$(date '+%H:%M:%S %D')"
 	
-	echo -e "${Cy_D}[${Cy_B}WARNING${Cy_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
+	echo -e "${CL1_yel}[${CL2_yel}WARNING${CL1_yel} ${TIME}] ${CL0_reset}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_file})
 }
 
 LOG-comp() {
 	local TIME="$(date '+%H:%M:%S %D')"
 	
-	echo -e "${Cg_D}[${Cg_B}COMPLETE${Cg_D} ${TIME}] ${Cres}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_FILE})
+	echo -e "${CL1_grn}[${CL2_grn}COMPLETE${CL1_grn} ${TIME}] ${CL0_reset}$*" | tee -a >(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' >> ${LOG_file})
 }
 
 LOG-cmd() {
@@ -77,6 +79,12 @@ LOG-cmd() {
 	"$@" || LOG-err "Command failed: $*"
 }
 
+LOG-parse() {
+	sleep 0.05
+	echo -e "${CL1_cyn}$*${CL0_reset}"
+}
+
+### MINI UTILS ###
 CREATE-dir() {
 	if [ ! -d "$1" ]; then
 		mkdir -p "$1"
@@ -128,9 +136,9 @@ APP-install-bin() {
 	if ! command -v "${BIN_cli}" &> /dev/null; then	
 		LOG-info "installing ${BIN_cli} (${BIN_ver})..."
 		if [ ! -f "$BIN_path" ]; then
-			if [ ! -f ${TAR_path} ]; then
+			if [ ! -s ${TAR_path} ]; then
 				# Download archive to /resources/archives
-				LOG-cmd wget "$BIN_url" -O "$TAR_path"
+				LOG-cmd wget "$TAR_url" -O "$TAR_path"
 			fi
 			# Extract from /resources/archives to /resources/bins
 			LOG-cmd tar -xvf "$TAR_path" -C "$RES_bins"
@@ -148,11 +156,11 @@ APP-install-bin() {
 PRE-install() {
 	LOG-info "Pre-install"
 	
-	SCAN-config "$APPS_LIST"
-	SCAN-config "$CONFIG_LINKS"
-	SCAN-config "$CONFIG_VIM"
-	SCAN-config "$CONFIG_FISH"
-	SCAN-config "$CONFIG_ZJ"
+	SCAN-config "$APPS_list"
+	SCAN-config "$CONFIG_links"
+	SCAN-config "$CONFIG_vim"
+	SCAN-config "$CONFIG_fish"
+	SCAN-config "$CONFIG_zj"
 
 	LOG-info "Please enter password..."
 	sudo -v || LOG-err "Incorrect password!"
@@ -168,7 +176,7 @@ PRE-install() {
 INSTALL-pkgs() {
 	LOG-info "Installing apps on ${ID}..."
 
-	APPS+=( $(< $APPS_LIST) )
+	APPS+=( $(< $APPS_list) )
 
 	# Installing vim mc btop
 	case $ID in
@@ -178,7 +186,7 @@ INSTALL-pkgs() {
 			;;
 		"ubuntu" | "debian" )
 			LOG-cmd sudo apt-get update
-			LOG-cmd sudo apt-get install -y "${APPS[@]}"
+			LOG-cmd sudo apt-get install "${APPS[@]}" -y
 			;;
 		* )
 			LOG-err "Unknown System."
@@ -206,7 +214,7 @@ INSTALL-dev() {
 SETUP-fish() {
 	LOG-info "Setup fish..."
 	
-	source "$CONFIG_FISH"
+	source "$CONFIG_fish"
 
 	if [[ ! $SHELL = "/usr/local/bin/fish" ]]; then
 		LOG-cmd sudo chsh -s "/usr/local/bin/fish" "$(id -un)"
@@ -237,14 +245,14 @@ SETUP-fish() {
 SETUP-zellij() {
 	LOG-info "Setup zellij..."
 
-	source "$CONFIG_ZJ"
+	source "$CONFIG_zj"
 }
 
 # install and setup Vim-Plug
 INSTALL-vp() {
 	LOG-info "Installing Vim-Plug (${VP_ver})..."
 	
-	source "$CONFIG_VIM"
+	source "$CONFIG_vim"
 	
 	# download and untar archive
 	local VP_tar="${RES_archs}/vp-${VP_ver}.tar.gz"
@@ -273,6 +281,10 @@ INSTALL-vp() {
 	EDIR-vimrc "${VIMRC}"
 }
 
+THEME-set() {
+	LOG-err "Setting theme not working."
+}
+
 POST-install() {
 	LOG-info "Post-install"
 	
@@ -286,76 +298,135 @@ POST-install() {
 	fi
 }
 
-parse-args() {
+PARSE-args() {
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			"-h" | "--help" | "h" | "help" )
-				echo -e "EP-SETUP ($SCRIPT_ver)"
-				echo -e "-f | --force   - Ignore unworking link-addresses."
-				echo -e "-a | --add-app - Add application to install (...include in apt / pacman)."
-				echo -e "-d | --dev-app - Add any-application to install for development (yq)."
-				echo -e ""
+				LOG-parse "EP-SETUP ($SCRIPT_ver)"
+				LOG-parse "--- | --------------- -"
+				LOG-parse "-sc | --skip-check    - Ignore pre-install module (scan config-files, check link-address)."
+				LOG-parse "-a  | --add-app       - Add application to install (...include in apt / pacman)."
+				LOG-parse "-d  | --dev-app       - Add any-application to install for development (yq)."
+				LOG-parse "-t  | --theme         - Choose your color-theme."
+				LOG-parse "-fa | --file-apps     - Path to custom app-list (only .txt)."
+				LOG-parse "--- | --------------- -"
+				LOG-parse "-oi | --only-install  - Only install apps."
+				LOG-parse "-ot | --only-theme    - Only set theme."
+				LOG-parse "-oc | --only-config   - Only set config (plugins for vim-plug, prompt for fish and zellij)."
+				LOG-parse ""
 				
 				exit 0
 				;;
 			"-a" | "--add-app" )
-				echo -e "ADD: add application $2..."
+				LOG-parse "ADD: add application $2..."
 				APPS+=("$2")
 				
 				shift 2
 				;;
 			"-d" | "--dev-app" )
-				echo -e "ADD: add application yq..."
-				ADD_dev="yes"
+				LOG-parse "ADD: add dev-applications (yq)..."
+				SET_dev="yes"
 
 				shift 1
 				;;
-			"-f" | "--force" )
-				echo -e "ADD: ignore unworking link-addresses..."
+			"-sc" | "--skip-check" )
+				LOG-parse "ADD: skip checkers..."
+				SET_checkers="no"
 				
 				shift 1
 				;;
-			"-v" | "--version" )
-				echo -e "$SCRIPT_ver"
+			"-oi" | "--only-install" )
+				LOG-parse "ADD: only installation pkgs..."
+				SET_modules="install"
+
+				shift 1
+				;;
+			"-ot" | "--only-theme" )
+				LOG-parse "ADD: only setting theme..."
+				SET_modules="theme"
+
+				shift 1
+				;;
+			"-oc" | "--only-config" )
+				LOG-parse "ADD: only setting configuration..."
+				SET_modules="config"
+
+				shift 1
+				;;
+			"-fa" | "--file-apps" )
+				LOG-parse "ADD: set custom apps-list..."
+				if [ -f "$2" ]; then
+					LOG-info "Set custom APPS-list file."
+					APPS_list="$2"
+				else
+					LOG-err "File not found!"
+				fi
+
+				shift 2
+				;;
+			"-v" | "--ver" | "--version" | "v" | "ver" | "version" )
+				LOG-parse "$SCRIPT_ver"
 				exit 0
 				;;
+			"" )
+				LOG-parse "INF: Without parameters..."
+				shift 1;
+				;;
 			* )
-				echo -e "ERR: Unknown parameter: $1"
+				LOG-parse "ERR: Unknown parameter: $1"
 				exit 1
 				;;
 		esac
 	done
 }
 
-parse-args "${@}"
+PARSE-args "${@:-}"
 
-main() {
-	### Create directories (this operations not write to log-file)
+MAIN() {
+	### CREATE DIRS
 	CREATE-dir "$RES_archs"
 	CREATE-dir "$RES_bins"
 	CREATE-dir "$RES_dirs"
 	CREATE-dir "$RES_logs"
 
-	### Initializate log-file
-	LOG_FILE="$RES_logs/log_$(date '+%y%m%d-%H%M%S').txt"
-	
-	if [ -f $LOG_FILE ]; then 
-		rm $LOG_FILE
+	### INITIALIZE LOG-FILE
+	if [ -f $LOG_file ]; then 
+		rm $LOG_file
 	fi
 	
-	touch $LOG_FILE
+	touch $LOG_file
 	
 	### START INSTALLATION PROCESS
+	if [[ $SET_checkers = "yes" ]]; then
+		PRE-install
+	fi
 	
-	PRE-install
-	INSTALL-pkgs
-	if [[ $ADD_dev = "yes" ]]; then
+	case $SET_modules in
+		"install" )
+			INSTALL-pkgs
+			;;
+		"config" ) 
+			SETUP-fish
+			SETUP-zellij
+			INSTALL-vp
+			;;
+		"theme" )
+			THEME-set
+			;;
+		"all" )
+			INSTALL-pkgs
+
+			SETUP-fish
+			SETUP-zellij
+			INSTALL-vp
+			;;
+	esac
+	
+	if [[ $SET_dev = "yes" ]]; then
 		INSTALL-dev
 	fi
-	#SETUP-fish
-	#SETUP-zellij
-	#INSTALL-vp
+
 	#POST-install
 }
 
-main
+MAIN

@@ -27,6 +27,7 @@ This script works on the following platforms:
 
 ## Structure
 (this schema created by 'tree')
+
 ```bash
 .
 ├── configs
@@ -37,12 +38,18 @@ This script works on the following platforms:
 ├── install.sh
 └── resources
     ├── archives
-    ├── bin
+    ├── bins
     ├── dirs
     └── logs
 ```
 
 ## Installation
+The script requires 'sudo', but it must be run as a regular user.
+
 ```bash
+# Enter to run default-installation
 ./install.sh
+
+# Enter to open the help-menu
+./install --help
 ```
