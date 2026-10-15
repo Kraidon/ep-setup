@@ -4,10 +4,10 @@
 ## Platforms
 This script works on the following platforms:
 
-| Architecture | ArchLinux | Ubuntu | Debian | Manjaro |
-| :----------- | :-------: | :----: | :----: | :-----: |
-| x86_64       | +         | +      | ?      | ?       |
-| aarch64      | +         | +      | +      | ?       |
+| Architecture      | ArchLinux | Ubuntu | Debian | Manjaro |
+| :---------------- | :-------: | :----: | :----: | :-----: |
+| x86_64  (amd64)   | +         | +      | ?      | ?       |
+| aarch64 (arm64)   | +         | +      | +      | ?       |
 
 ## Packages and Plugins
 - Packages:
@@ -44,12 +44,12 @@ This script works on the following platforms:
 ```
 
 ## Installation
-The script requires 'sudo', but it must be run as a regular user.
+The script requires 'sudo' (processes like a apt/pacman needed root privilegies), but it must be run as a regular user.
 
 ```bash
 # Enter to run default-installation
-./install.sh
+sudo ./install.sh
 
 # Enter to open the help-menu
-./install --help
+./install.sh --help
 ```

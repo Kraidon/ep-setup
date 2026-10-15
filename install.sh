@@ -8,11 +8,11 @@ PATTERN_path="$CONFIG_path/patterns"
 RESOURCE="$SCRIPT_path/resources"
 RES_archs="$RESOURCE/archives"
 RES_bins="$RESOURCE/bins"
-RES_dirs="$RESOURCE/dirs"
+RES_srcs="$RESOURCE/srcs"
 RES_logs="$RESOURCE/logs"
 LOG_file="$RES_logs/log_$(date '+%y%m%d-%H%M%S').txt"
 
-SCRIPT_ver="v0.0.7"
+SCRIPT_ver="v0.0.8"
 
 CONFIG_links="$CONFIG_path/links.env"
 APPS_list="$CONFIG_path/apps.txt"
@@ -114,6 +114,46 @@ SCAN-link() {
 	fi
 }
 
+WRITE-sed-end() {
+	local LINE="$1"
+	local FILE="$2"
+
+	if grep -q "$1" "$2"; then
+		LOG-info "Line \"${1}\" already include in ${2}"
+	else
+		LOG-comp "Add \"${1}\" to ${2}"
+		echo "${1}" >> "${2}"
+	fi
+}
+
+WRITE-awk-change() {
+	local OLD_TEXT="$1"
+	local NEW_TEXT="$2"
+	local FILE="$3"
+
+	SAFE_TEXT=$(echo "$BAD_TEXT" | sed -e 's/\\/\\\\\\\\/g' -e 's/&/\\\\\&/g')
+
+	awk -v old="${OLD_TEXT}" -v new="${NEW_TEXT}" '
+	' "${FILE}.tmp" && mv "${FILE}.tmp" "${FILE}"
+}
+
+WRITE-sed-after() {
+	local AFTER_LINE="$1"
+	local INPUT_LINE="$2"
+	local FILE="$3"
+
+	sed -i "/${AFTER_LINE}/a ${INPUT_LINE}" "${FILE}"
+}
+
+WRITE-eof-add() {
+	local TEXT="$1"
+	local FILE="$2"
+
+	cat <<EOF >> ${FILE}
+$TEXT
+EOF
+}
+
 # App installation
 #
 # 1 args: Name of cli
@@ -126,15 +166,14 @@ SCAN-link() {
 # APP-install-bin 'yourapp' 'v1' 'https://any-site.com/yourapp-v1.tar.gz' 'yourapp-v1' 'yourapp-v1.tar.gz'
 #
 APP-install-bin() {
-	local BIN_cli="$1"
+	local BIN_name="$1"
 	local BIN_ver="$2"
 	local TAR_url="$3"
-	
-	local BIN_path="${RES_bins}/$4"
-	local TAR_path="${RES_archs}/$5"
+	local TAR_path="$4"
+	local BIN_path="$5"
 
-	if ! command -v "${BIN_cli}" &> /dev/null; then	
-		LOG-info "installing ${BIN_cli} (${BIN_ver})..."
+	if ! command -v "${BIN_name}" &> /dev/null; then	
+		LOG-info "installing ${BIN_name} (${BIN_ver})..."
 		if [ ! -f "$BIN_path" ]; then
 			if [ ! -s ${TAR_path} ]; then
 				# Download archive to /resources/archives
@@ -146,13 +185,30 @@ APP-install-bin() {
 		fi
 		# Moving from /resources/bins to /usr/local/bin
 		LOG-cmd sudo mv "$BIN_path" "/usr/local/bin/${BIN_cli}"
-		LOG-comp "${BIN_cli} has been successfully installed!"
+		LOG-comp "${BIN_name} has been successfully installed!"
 	else
-		LOG-info "${BIN_cli} is already installed!"
+		LOG-info "${BIN_name} is already installed!"
 	fi
 }
 
-# Check config-file and connection to link-addresses
+APP-install-src() {
+	local SRC_name="$1"
+	local SRC_ver="$2"
+	local TAR_url="$3"
+	local TAR_path="$4"
+	local SRC_path="$5"
+
+	LOG-info "installing ${SRC_name} (${SRC_ver})..."
+	if [ ! -d "$SRC_path" ]; then
+		if [ ! -s ${TAR_path} ]; then
+			# Download archive to /resources/archives
+			LOG-cmd wget "$TAR_url" -O "$TAR_path"
+		fi
+		# Extract from /resources/archives to /resources/srcs
+		LOG-cmd tar -xvf "$TAR_path" -C "$RES_srcs"
+	fi
+}
+
 PRE-install() {
 	LOG-info "Pre-install"
 	
@@ -172,7 +228,6 @@ PRE-install() {
 	SCAN-link "$YQ_url"
 }
 
-# Install pkgs (default: fish, zellij, vim, btop, mc)
 INSTALL-pkgs() {
 	LOG-info "Installing apps on ${ID}..."
 
@@ -195,90 +250,20 @@ INSTALL-pkgs() {
 	esac
 
 	APP-install-bin "fish" "$FISH_ver" "$FISH_url" \
-		"fish" \
-		"fish-$FISH_ver.tar.xz"
+		"${RES_archs}/fish-$FISH_ver.tar.xz" \
+		"${RES_bins}/fish"
 	
 	APP-install-bin "zellij" "$ZJ_ver" "$ZJ_url" \
-		"zellij" \
-		"zellij-$ZJ_ver.tar.gz"
+		"${RES_archs}/zellij-$ZJ_ver.tar.gz" \
+		"${RES_bins}/zellij"
 }
 
 INSTALL-dev() {
 	LOG-info "Installing dev-apps..."
 
 	APP-install-bin "yq" "$YQ_ver" "$YQ_url" \
-		"yq_linux_${SHORT_ARCH}" \
-		"yq-$YQ_ver.tar.gz"
-}
-
-SETUP-fish() {
-	LOG-info "Setup fish..."
-	
-	source "$CONFIG_fish"
-
-	if [[ ! $SHELL = "/usr/local/bin/fish" ]]; then
-		LOG-cmd sudo chsh -s "/usr/local/bin/fish" "$(id -un)"
-	fi
-	
-	local CONFD_dir="${HOME}/.config/fish/conf.d"
-	local FUNC_dir="${HOME}/.config/fish/functions"
-
-	local THEME_conf="${CONFD_dir}/fish_frozen_theme.fish"
-	local PROMPT_conf="${FUNC_dir}/fish_prompt.fish"
-	
-	if [ -f "$THEME_conf" ]; then
-		if [ -d "$CONFD_dir" ]; then
-			LOG-cmd mkdir -p "$CONFD_dir"
-		fi
-		if [ -d "$FUNC_dir" ]; then
-			LOG-cmd mkdir -p "$FUNC_dir"
-		fi
-
-		LOG-cmd touch "$THEME_conf"
-		LOG-cmd touch "$PROMPT_conf"
-	fi
-
-	# EDIT-fish_frozen_theme "${THEME_conf}"
-	# EDIT-fish_prompt "${PROMPT_conf}"
-}
-
-SETUP-zellij() {
-	LOG-info "Setup zellij..."
-
-	source "$CONFIG_zj"
-}
-
-# install and setup Vim-Plug
-INSTALL-vp() {
-	LOG-info "Installing Vim-Plug (${VP_ver})..."
-	
-	source "$CONFIG_vim"
-	
-	# download and untar archive
-	local VP_tar="${RES_archs}/vp-${VP_ver}.tar.gz"
-	local VP_dir="${RES_dirs}/vim-plug-${VP_ver}"
-	
-	if [ ! -d "$VP_dir" ]; then
-		if [ ! -f ${VP_tar} ]; then 
-			LOG-cmd wget "$VP_url" -O "$VP_tar"
-		fi
-		LOG-cmd tar -xvf "$VP_tar" -C "$RES_dirs"
-	fi
-	
-	# add plug.vim
-	local AUTOLOAD_dir="${HOME}/.vim/autoload/"
-	local PLUG_VIM="$VP_dir/plug.vim"
-
-	local VIMRC="${HOME}/.vimrc"
-	
-	if [ ! -f "$PLUG_VIM" ]; then
-		if [ ! -d "$AUTOLOAD_dir" ]; then
-			LOG-cmd mkdir -p "$AUTOLOAD_dir"
-		fi
-		LOG-cmd cp "$PLUG_VIM" "$AUTOLOAD_dir"
-	fi
-
-	EDIR-vimrc "${VIMRC}"
+		"${RES_archs}/yq-$YQ_ver.tar.gz" \
+		"${RES_bins}/yq_linux_${SHORT_ARCH}"
 }
 
 THEME-set() {
@@ -292,9 +277,9 @@ POST-install() {
 	if [ -d "$RES_bins" ]; then
 		LOG-cmd rm -rf "$RES_bins/*"
 	fi
-	# Clean ./resources/dirs
-	if [ -d "$RES_dirs" ]; then
-		LOG-cmd rm -rf "$RES_dirs/*"
+	# Clean ./resources/srcs
+	if [ -d "$RES_srcs" ]; then
+		LOG-cmd rm -rf "$RES_srcs/*"
 	fi
 }
 
@@ -386,7 +371,7 @@ MAIN() {
 	### CREATE DIRS
 	CREATE-dir "$RES_archs"
 	CREATE-dir "$RES_bins"
-	CREATE-dir "$RES_dirs"
+	CREATE-dir "$RES_srcs"
 	CREATE-dir "$RES_logs"
 
 	### INITIALIZE LOG-FILE
@@ -397,9 +382,13 @@ MAIN() {
 	touch $LOG_file
 	
 	### START INSTALLATION PROCESS
-	if [[ $SET_checkers = "yes" ]]; then
-		PRE-install
-	fi
+	# if [[ $SET_checkers = "yes" ]]; then
+	# 	PRE-install
+	# fi
+	
+	LOG-cmd source "$CONFIG_fish"
+	LOG-cmd source "$CONFIG_zj"
+	LOG-cmd source "$CONFIG_vim"
 	
 	case $SET_modules in
 		"install" )
@@ -408,17 +397,17 @@ MAIN() {
 		"config" ) 
 			SETUP-fish
 			SETUP-zellij
-			INSTALL-vp
+			SETUP-vimplug
 			;;
 		"theme" )
 			THEME-set
 			;;
 		"all" )
-			INSTALL-pkgs
+			# INSTALL-pkgs
 
 			SETUP-fish
-			SETUP-zellij
-			INSTALL-vp
+			# SETUP-zellij
+			# SETUP-vimplug
 			;;
 	esac
 	
